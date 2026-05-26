@@ -11,7 +11,7 @@ auth_file: ~/.browser_automation/gdrive_auth.json
 No OAuth2 app or admin approval needed. Two layers:
 
 1. **Google Drive for Desktop** — mounts your Drive at `~/Library/CloudStorage/GoogleDrive-<email>/`. No auth, no tokens, instant file access.
-2. **Playwright daemon** (`gdrive_server.py`) — keeps one browser open persistently. All online operations (read content, search cloud-only files) route through it. SSO happens once; no repeated auth prompts.
+2. **Playwright daemon** (`gdrive_server.py`) — opens one visible Test Chrome for online operations (read content, search cloud-only files). Normal CLI/context-manager usage stops it when done; pass `--keep-open` or `GDrive(keep_open=True)` when you want to reuse the browser for batch work.
 
 **Write support:** Not available. Google Docs and Slides have no write path without OAuth2. Sheets keyboard-navigation write exists but is too fragile for production use.
 
@@ -23,6 +23,7 @@ No OAuth2 app or admin approval needed. Two layers:
 import sys
 sys.path.insert(0, "tool_connections/google-drive")
 from google_drive import GDriveLocal
+from google_drive import GDrive
 
 local = GDriveLocal()
 
@@ -65,6 +66,19 @@ notes   = local.drive.read(file_id, "presentation")
 # Search online (covers all of Drive including Shared with me)
 results = local.drive.search("project proposal")
 results = local.drive.search("owner:me budget")     # files you own
+local.close()  # stop the visible Test Chrome when done
+
+# For standalone one-shot reads, use a context manager; it stops Chrome on exit.
+with GDrive() as drive:
+    content = drive.read(file_id, "document")
+# → "The Enterprise AI Transformation\nOur product vision and strategy..."
+
+# For batch work, opt in to keeping the browser open, then close it explicitly.
+drive = GDrive(keep_open=True)
+content = drive.read(file_id, "document")
+other = drive.read(other_file_id, "document")
+drive.close()
+# → both reads return text, then the visible Test Chrome closes after drive.close()
 ```
 
 ---
@@ -126,7 +140,9 @@ nohup .venv/bin/python3 tool_connections/google-drive/gdrive_server.py start > /
 python3 tool_connections/google-drive/gdrive_server.py stop
 ```
 
-The daemon keeps one browser window open — minimize it, don't close it.
+The daemon keeps one browser window open only while it is running. One-shot CLI
+commands and `with GDrive()` stop it automatically; long batch workflows can use
+`--keep-open` / `GDrive(keep_open=True)` and then stop it with the command above.
 Log: `~/.browser_automation/gdrive_server.log`
 
 ---

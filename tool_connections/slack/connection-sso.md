@@ -144,6 +144,32 @@ for m in matches:
 
 ---
 
+## Resolve a user before DM/upload
+
+`users.lookupByEmail` can return `not_allowed_token_type` for the xoxc session token. When that happens, recover the user ID from Slack search, then verify it with `users.info` before opening a DM.
+
+```python
+# First try lookupByEmail if available.
+r = api("GET", "users.lookupByEmail", params={"email": "person@example.com"})
+# → {"ok": false, "error": "not_allowed_token_type"}  # common for xoxc sessions
+if r.get("ok"):
+    user_id = r["user"]["id"]
+else:
+    # Fallback: search mentions and extract the <@ID|handle> value from results.
+    sr = api("GET", "search.messages",
+             params={"query": '"Person Name" OR "person.handle"', "count": "10"})
+    # → {"ok": true, "messages": {"matches": [{"text": "...<@U0123456789|person.handle>..."}]}}
+    user_id = "U0123456789"  # Example from a result like <@U0123456789|person.handle>
+
+info = api("GET", "users.info", params={"user": user_id})
+# → {"ok": true, "user": {"id": "U0123456789", ...}}
+assert info.get("ok"), info
+dm = api("POST", "conversations.open", {"users": user_id})
+# → {"ok": true, "channel": {"id": "D0123456789", ...}}
+```
+
+---
+
 ## Read thread from URL
 
 ```python
@@ -170,6 +196,7 @@ messages = r.get("messages", [])
 | `conversations.replies` | Fetch thread / poll for Slack AI | `channel`, `ts` (thread root), `limit` |
 | `conversations.history` | Read recent channel messages | `channel`, `limit` |
 | `search.messages` | Full-text search with date filters | `query`, `count`, `sort` |
+| `users.lookupByEmail` | Look up user by email when token permits | `email` |
 | `users.info` | Look up user by ID | `user` |
 
 ---

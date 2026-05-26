@@ -383,6 +383,15 @@ def is_running() -> bool:
         return False
 
 
+def stop() -> bool:
+    """Stop the daemon if it is running. Returns True when a stop signal was sent."""
+    if not PID_FILE.exists():
+        return False
+    pid = int(PID_FILE.read_text().strip())
+    os.kill(pid, signal.SIGTERM)
+    return True
+
+
 def ensure_running():
     """Start the daemon if not already running. Blocks until ready."""
     if is_running():
@@ -429,10 +438,8 @@ if __name__ == "__main__":
         run_daemon()
 
     elif cmd == "stop":
-        if PID_FILE.exists():
-            pid = int(PID_FILE.read_text().strip())
-            os.kill(pid, signal.SIGTERM)
-            print(f"Stopped (pid {pid})")
+        if stop():
+            print("Stopped")
         else:
             print("Not running")
 

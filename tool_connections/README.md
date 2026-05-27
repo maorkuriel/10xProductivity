@@ -54,7 +54,7 @@ Once your agent can see across your tools simultaneously, a new class of capabil
 Ask questions that span systems. "What was the decision behind this change?" pulls the GitHub PR, the Jira ticket it closed, the Slack thread where it was debated, and the Confluence doc that captured the outcome — in one answer, in seconds.
 
 **Cross-tool reasoning**
-"Show me all PagerDuty incidents from last week that still have open Jira follow-ups with no activity in 3 days." That query touches three systems, requires no new integration layer, and runs right now. The agent is the integration layer.
+"Show me all incident alerts from last week that still have open ticket follow-ups with no activity in 3 days." That query touches multiple systems, requires no new integration layer, and runs right now. The agent is the integration layer.
 
 **Compound automation**
 Repetitive multi-step work — triage a Slack alert, file a Jira ticket, assign it, post a summary back to the channel — becomes a single agent instruction. The tools are already connected; the only thing left is telling it what to do.

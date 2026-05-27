@@ -54,12 +54,28 @@ The Outlook SSO plugin appends the hint to the Outlook login URL and also tries 
 Verified scrubbed output:
 
 ```text
-$ python3 tool_connections/shared_utils/playwright_sso.py --outlook-only --login-hint user@example.com
-# → outlook: expired or missing
-# → Opening Outlook (...) with login hint user@example.com
-# → Login detected!
-# → Updated GRAPH_ACCESS_TOKEN
-# → Updated OWA_ACCESS_TOKEN
+$ python3 tool_connections/shared_utils/playwright_sso.py --outlook-only --force
+SSO token refresher
+  .env: /path/to/10xProductivity/.env
+
+  Refreshing outlook...
+  Opening Outlook (https://outlook.office.com/mail/) with login hint alice@example.com — Azure AD SSO should auto-complete...
+    Waiting for Outlook login to complete (up to 3 min — Ctrl+C to abort)...
+    Still waiting... (163s remaining — Ctrl+C to abort)
+    Login detected!
+    Graph token captured (3215 chars)
+    OWA token captured (5098 chars)
+  Updated /path/to/10xProductivity/.env
+    Updated GRAPH_ACCESS_TOKEN
+    Updated OWA_ACCESS_TOKEN
+
+Done.
+
+$ python3 - <<'PY'  # verify Graph /me and OWA messages with refreshed tokens
+# → graph /me status: 200
+# → graph user present: True
+# → owa messages status: 200
+# → owa messages returned: 1
 ```
 
 Observed failure case: if the wrong Microsoft account is selected, Graph `/me`

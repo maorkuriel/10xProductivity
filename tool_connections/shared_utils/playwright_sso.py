@@ -18,6 +18,7 @@ Usage:
     python3 playwright_sso.py --gdrive-only    # refresh Google Drive only
     python3 playwright_sso.py --teams-only     # refresh Microsoft Teams only
     python3 playwright_sso.py --outlook-only   # refresh Outlook only
+    python3 playwright_sso.py --outlook-only --login-hint user@example.com
     python3 playwright_sso.py --slack-only --account acme
     python3 playwright_sso.py --list           # list discovered plugins
 """
@@ -165,6 +166,14 @@ def main():
             "writes SLACK_ACME_XOXC / SLACK_ACME_D_COOKIE."
         ),
     )
+    parser.add_argument(
+        "--login-hint",
+        metavar="EMAIL",
+        help=(
+            "Optional account/email hint for SSO plugins that support it, "
+            "for example Outlook. Overrides *_LOGIN_HINT values from .env."
+        ),
+    )
 
     for name in plugins:
         parser.add_argument(f"--{name}-only", action="store_true",
@@ -180,6 +189,8 @@ def main():
         return
 
     env = load_env(args.env_file)
+    if args.login_hint:
+        env["SSO_LOGIN_HINT"] = args.login_hint
 
     # Determine which tools to run
     only_flags = {name: getattr(args, f"{name}_only", False) for name in plugins}

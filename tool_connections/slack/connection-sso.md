@@ -11,7 +11,7 @@ env_vars:
 
 Access is via your own user session (`xoxc` client token) extracted after SSO — no Slack app installation or admin approval needed.
 
-Env: `SLACK_XOXC`, `SLACK_D_COOKIE` (~8h — refresh via `python3 tool_connections/shared_utils/playwright_sso.py --slack-only`)
+Env: `SLACK_XOXC`, `SLACK_D_COOKIE` (long-lived user session; refresh via `python3 tool_connections/shared_utils/playwright_sso.py --slack-only` only when the session stops working)
 
 Multiple Slack workspaces are supported with account-scoped env keys:
 `SLACK_ACME_WORKSPACE_URL`, `SLACK_ACME_XOXC`, `SLACK_ACME_D_COOKIE`

@@ -28,7 +28,7 @@ Env: `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_BASE_URL`
 ## Slack → `tool_connections/slack/connection-sso.md`
 
 Slack — two complementary modes. (1) Slack AI: post a natural-language question to the Slackbot DM and get a synthesized AI answer drawn from all Slack content. (2) search.messages: raw full-text search. Also: read channel/thread history, post messages.
-Env: `SLACK_XOXC`, `SLACK_D_COOKIE` (~8h — refresh with `python3 tool_connections/slack/sso.py`)
+Env: `SLACK_XOXC`, `SLACK_D_COOKIE` (long-lived user session; refresh with `python3 tool_connections/slack/sso.py` only when the session stops working)
 
 ---
 

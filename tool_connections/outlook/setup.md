@@ -24,6 +24,16 @@ source .venv/bin/activate
 python3 tool_connections/shared_utils/playwright_sso.py --outlook-only
 ```
 
+If Microsoft asks for an account, pass a login hint:
+
+```bash
+python3 tool_connections/shared_utils/playwright_sso.py \
+  --outlook-only \
+  --login-hint user@example.com
+```
+
+You can also persist the hint in `.env` as `OUTLOOK_LOGIN_HINT=user@example.com`.
+
 On a corporate-managed machine (Intune/MDM or similar), Azure AD SSO auto-completes in ~30s. On unmanaged machines, complete the Microsoft 365 login once through the browser.
 
 Two tokens are written to `.env`:
@@ -82,6 +92,7 @@ Token TTL: ~1h. Session TTL: ~24h. **Connection details:** `tool_connections/out
 ```bash
 # --- Outlook / Microsoft 365 (work account) ---
 # Short-lived (~1h) — refresh with: python3 tool_connections/shared_utils/playwright_sso.py --outlook-only
+OUTLOOK_LOGIN_HINT=user@example.com
 GRAPH_ACCESS_TOKEN=your-graph-bearer-token-here
 OWA_ACCESS_TOKEN=your-owa-bearer-token-here
 

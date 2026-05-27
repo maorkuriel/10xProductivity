@@ -36,6 +36,19 @@ python3 tool_connections/shared_utils/playwright_sso.py --outlook-only
 # Writes GRAPH_ACCESS_TOKEN + OWA_ACCESS_TOKEN to .env
 ```
 
+If Microsoft asks which account to use, pass a login hint or set it in `.env`:
+
+```bash
+python3 tool_connections/shared_utils/playwright_sso.py \
+  --outlook-only \
+  --login-hint user@example.com
+
+# Or in .env:
+OUTLOOK_LOGIN_HINT=user@example.com
+```
+
+The Outlook SSO plugin appends the hint to the Outlook login URL and also tries to fill the Microsoft email field if it appears.
+
 The script intercepts two tokens from network requests as the Outlook app loads:
 - **Graph token**: from the first `graph.microsoft.com` request (user photo)
 - **OWA token**: from `outlook.office.com/owa/startupdata.ashx` (app startup data)

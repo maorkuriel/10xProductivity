@@ -71,13 +71,13 @@ print(r.get("user"), r.get("team"))
 # --- Slack ---
 # Short-lived (~8h) — refresh with: python3 tool_connections/shared_utils/playwright_sso.py --slack-only
 SLACK_WORKSPACE_URL=https://yourcompany.slack.com/
-SLACK_XOXC=xoxc-your-slack-client-token
-SLACK_D_COOKIE=xoxd-your-slack-d-cookie-value
+SLACK_XOXC=your-slack-client-token
+SLACK_D_COOKIE=your-slack-d-cookie-value
 
 # Optional second workspace:
 SLACK_ACME_WORKSPACE_URL=https://acme.slack.com/
-SLACK_ACME_XOXC=xoxc-your-acme-client-token
-SLACK_ACME_D_COOKIE=xoxd-your-acme-d-cookie-value
+SLACK_ACME_XOXC=your-acme-client-token
+SLACK_ACME_D_COOKIE=your-acme-d-cookie-value
 ```
 
 ---

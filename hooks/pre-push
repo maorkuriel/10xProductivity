@@ -170,22 +170,13 @@ else
     exit 1
 fi
 
-# GNU coreutils `timeout` is often missing on macOS; without it the probe must not fail spuriously.
-agent_auth_probe() {
-    if command -v timeout > /dev/null 2>&1; then
-        timeout 10 agent -p --trust --mode=ask "say: ok"
-    elif command -v gtimeout > /dev/null 2>&1; then
-        gtimeout 10 agent -p --trust --mode=ask "say: ok"
-    else
-        agent -p --trust --mode=ask "say: ok"
-    fi
-}
-
 # For Cursor agent: verify authentication (keychain-based, run `agent login` once).
+# Use `agent whoami` — fast (~1s) and purpose-built for auth checks.
+# The old probe ran a full prompt which could exceed the timeout in hook context.
 if $USING_CURSOR_AGENT; then
-    if ! agent_auth_probe > /dev/null 2>&1; then
-        echo "❌ Push blocked — Cursor agent is not authenticated and AI review is required."
-        echo "   Fix: run: agent login"
+    if ! agent whoami > /dev/null 2>&1; then
+        echo "❌ Push blocked — Cursor agent is not authenticated."
+        echo "   Fix: run 'agent login' once (opens browser, saves to keychain)."
         echo "   To bypass intentionally: set SKIP_AI_REVIEW=1 in .env"
         exit 1
     fi
@@ -210,8 +201,12 @@ if [[ "$CURRENT_BRANCH" == "main" ]] && $HAS_TOOL_CONNECTIONS_DOCS; then
 QUALITY CHECKS (any failure = VERDICT: FAIL, blocks push):
 
 3. Validation quality — every snippet has a real output comment (not a
-   placeholder), at least 2 endpoints tested, auth flow documented end-to-end,
-   token lifetime documented, at least one failure case noted.
+   placeholder), auth flow documented end-to-end, token lifetime documented,
+   at least one failure case noted.
+   Endpoint coverage: at least 2 endpoints tested when the tool exposes
+   multiple endpoints (REST APIs, Graph + OWA, etc.). For browser-only
+   or single-surface tools (e.g. a search UI with one query path), one
+   verified endpoint with both single and multi-turn evidence is sufficient.
    NOTE: scrubbed output is acceptable — realistic-looking but anonymized IDs,
    generic names (Alice, My Notebook), and randomized hex strings in # → lines
    are valid evidence of a verified run. Do not flag them as placeholders if

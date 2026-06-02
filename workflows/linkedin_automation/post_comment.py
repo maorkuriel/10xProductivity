@@ -99,8 +99,11 @@ def _find_comment_editor(page):
     for sel in (
         '[aria-label="Text editor for commenting"]',
         '[aria-label="Add a comment…"]',
+        '[aria-label="Add a comment..."]',
         "div.comments-comment-texteditor div.ql-editor",
         ".comments-comment-box--cr div.ql-editor",
+        'div[role="textbox"][contenteditable="true"]',
+        'div.ql-editor[contenteditable="true"]',
     ):
         loc = page.locator(sel).first
         try:
@@ -110,6 +113,12 @@ def _find_comment_editor(page):
             continue
     try:
         loc = page.get_by_role("textbox", name="Text editor for commenting").first
+        if loc.is_visible(timeout=800):
+            return loc
+    except Exception:
+        pass
+    try:
+        loc = page.get_by_role("textbox", name=re.compile("comment", re.I)).first
         if loc.is_visible(timeout=800):
             return loc
     except Exception:
@@ -130,7 +139,11 @@ def reveal_comments_thread(page) -> None:
     def _on_thread_response(resp):
         try:
             url = resp.url or ""
-            if "fetchFeedUpdateActionPrompt" in url or "fetchComment" in url:
+            if (
+                "fetchFeedUpdateActionPrompt" in url
+                or "fetchComment" in url
+                or "sdui.comments" in url
+            ):
                 _thread_responses.append(url)
         except Exception:
             pass
@@ -228,6 +241,9 @@ def _top_comment_composer(page):
         page.locator(".comments-comment-box--cr").first,
         page.locator("div.comments-comment-box.comments-comment-box--cr").first,
         page.locator("div.comments-comment-box").first,
+        page.locator("section.comments-comments-list").first,
+        page.locator("div.feed-shared-comment-box").first,
+        page.locator("[class*='feed-shared-comment-box']").first,
     ]
     for loc in candidates:
         try:
@@ -248,6 +264,8 @@ def _top_comment_composer(page):
             "xpath=./ancestor::form[1]",
             "xpath=./ancestor::div[contains(@class,'comments-comment-box')][1]",
             "xpath=./ancestor::div[contains(@class,'comments-comment')][1]",
+            "xpath=./ancestor::section[contains(@class,'comments-comments-list')][1]",
+            "xpath=./ancestor::div[contains(@class,'feed-shared-comment-box')][1]",
         ):
             try:
                 box = editor.locator(xpath)
@@ -263,6 +281,28 @@ def _top_comment_composer(page):
     )
 
 
+def _resolve_top_comment_editable(composer, page):
+    """Return the focused input: legacy Quill ``.ql-editor`` or SDUI ``contenteditable``."""
+    trials = (
+        lambda: composer.locator("div.ql-editor").first,
+        lambda: composer.locator('[role="textbox"][contenteditable="true"]').first,
+        lambda: composer.locator("div[contenteditable='true']").first,
+    )
+    last: Exception | None = None
+    for mk in trials:
+        editor = mk()
+        try:
+            editor.wait_for(state="visible", timeout=9000)
+            return editor
+        except Exception as e:
+            last = e
+            continue
+    fallback = _find_comment_editor(page)
+    if fallback is not None:
+        return fallback
+    raise TimeoutError(last or "no comment editor visible")
+
+
 def _prepare_top_comment_editor(page):
     """Scroll composer into view, click to activate, return ``(editor, composer)`` locators."""
     composer = _top_comment_composer(page)
@@ -273,6 +313,7 @@ def _prepare_top_comment_editor(page):
     for loc in (
         composer.locator('[aria-label="Add a comment…"]'),
         composer.locator('[aria-label="Add a comment..."]'),
+        composer.locator('[aria-label="Open comments"]'),
     ):
         try:
             el = loc.first
@@ -284,11 +325,10 @@ def _prepare_top_comment_editor(page):
         except Exception:
             continue
 
-    editor = composer.locator("div.ql-editor").first
-    editor.wait_for(state="visible", timeout=15_000)
+    editor = _resolve_top_comment_editable(composer, page)
     editor.scroll_into_view_if_needed(timeout=10_000)
     editor.click(timeout=5000)
-    print("Clicked top-level Quill comment editor (focus for typing).", flush=True)
+    print("Clicked top-level comment editor (Quill or SDUI contenteditable).", flush=True)
     pause_uniform(0.4, 0.75)
     return editor, composer
 
@@ -403,6 +443,16 @@ def submit_comment_on_page(
                 btn.click(timeout=5000)
                 posted = True
                 print("Clicked Post (role) in main comment composer.", flush=True)
+        except Exception:
+            pass
+    if not posted:
+        try:
+            btn = composer.locator('button[aria-label="Post"]').first
+            if btn.is_enabled(timeout=2500):
+                btn.scroll_into_view_if_needed()
+                btn.click(timeout=5000)
+                posted = True
+                print('Clicked Post (aria-label="Post") in main comment composer.', flush=True)
         except Exception:
             pass
 

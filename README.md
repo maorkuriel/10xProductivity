@@ -1,8 +1,8 @@
 # 10xProductivity — Personal AI Assistant for Work, Built on Coding Agents
 
-**A human-AI interaction platform for building a personal AI assistant for work on top of the coding agents and tools you already use.**
+**A local-first stack for building a personal AI assistant for work inside real corporate constraints.**
 
-You connect your tools, coach your agent through real work, and gradually turn repeated patterns into reusable skills and trusted workflows.
+Use the coding agents, browser sessions, desktop apps, notifications, and tool access you already have. No new company-wide automation platform, no admin-approved Slack app, no webhooks, and no IT project required.
 
 [![GitHub Stars](https://img.shields.io/github/stars/ZhixiangLuo/10xProductivity?style=social)](https://github.com/ZhixiangLuo/10xProductivity/stargazers)
 
@@ -20,9 +20,18 @@ If this saves you time, consider giving it a star. It helps others discover the 
 
 ## The Idea
 
-Coding agents are no longer just coding assistants. Cursor, Claude Code, Codex, Copilot, and similar tools can read files, run scripts, call APIs, use browsers, and work across your local environment.
+Most employees cannot install a new automation platform, register Slack or GitHub apps, add webhooks, or wait for IT approval every time they want an AI agent to help.
 
-10xProductivity turns that agent into a personal work assistant.
+10xProductivity builds around the access you already have:
+
+- your coding agent
+- your browser and desktop apps
+- your authenticated sessions
+- your local machine
+- your existing permissions
+- your app notifications, messages, and calendar events
+
+Coding agents are no longer just coding assistants. Cursor, Claude Code, Codex, Copilot, and similar tools can read files, run scripts, call APIs, use browsers, and work across your local environment. 10xProductivity turns that agent into a personal work assistant that can operate within normal workplace constraints.
 
 The shift is not "let an AI run autonomously." The shift is **human-AI interaction**:
 
@@ -32,7 +41,7 @@ The shift is not "let an AI run autonomously." The shift is **human-AI interacti
 - Repeated patterns become reusable agent skills.
 - Working sessions become persistent memory.
 - Mistakes and tool use become better skills.
-- Trusted skills become workflows you can launch from chat or cron.
+- Trusted skills become workflows you can launch from triggers, schedules, or your laptop.
 
 Tool connections are still the foundation, but they are no longer the whole product. They are the first layer of a broader personal AI assistant for work stack.
 
@@ -96,14 +105,14 @@ Over time, your skill library becomes the operating manual for your personal AI 
 
 Once a workflow has been coached and proven, you can run it with less supervision:
 
-- From a local trigger, such as Slack self-DM polling or a desktop notification
+- From an event trigger, such as Slack self-DM polling or a desktop notification
 - From a scheduled cron/launchd job
 - From a repeatable workflow prompt
 - From your laptop when you want richer interaction
 
 Automation is reserved for workflows you trust. Everything else stays in the human-AI interaction loop.
 
-The current runtime is intentionally thin and local. Triggers notice events, runtime handles execution mechanics, workflows define the work, and tool connections fetch or update external systems.
+The current runtime is intentionally thin and local. Triggers notice app and service events, runtime handles execution mechanics, workflows define the work, and tool connections fetch or update external systems.
 
 ### 5. Learn Continuously
 
@@ -161,7 +170,7 @@ Set `TENX_PRIVATE_DIR` if you want a different private directory. The repo keeps
 
 Migration note: older local instructions may point at `/path/to/10xProductivity/.env`, `/path/to/10xProductivity/personal/`, or `/path/to/10xProductivity/verified_connections.md`. Those now map to `TENX_PRIVATE_DIR/.env`, `TENX_PRIVATE_DIR/personal/`, and `TENX_PRIVATE_DIR/verified_connections.md`. The repo `personal/` folder is only a placeholder with this reminder.
 
-The current repo is strongest at the connection layer. The trigger, runtime, and workflow layers now exist, but are still early. The next product direction is to harden local-first triggers, promote more workflows, and make runtime execution reliable without requiring enterprise app installs or new infrastructure.
+The current repo is strongest at the connection layer. The trigger, runtime, and workflow layers now exist, but are still early. The next product direction is to harden enterprise-friendly triggers, promote more workflows, and make runtime execution reliable without requiring enterprise app installs or new infrastructure.
 
 ## Work Surfaces
 
@@ -183,7 +192,7 @@ Internal portals and custom company tools matter just as much as commercial SaaS
 
 Agent skills sit above raw tool connections. They teach your coding agent how to do work, not just how to call an API.
 
-Packaged skills currently cover [tool setup](.cursor/skills/tool-connector/SKILL.md), [enterprise search](.cursor/skills/enterprise-search/SKILL.md), [workflow creation](.cursor/skills/create-workflow/SKILL.md), [UI surface discovery](.cursor/skills/discover-ui-surface/SKILL.md), [colleague distillation](.cursor/skills/colleague-distillation/SKILL.md), and the [assistant runtime](.cursor/skills/assistant-orchestrator/SKILL.md).
+Packaged skills currently cover [tool setup](.cursor/skills/tool-connector/SKILL.md), [enterprise search](.cursor/skills/enterprise-search/SKILL.md), [workflow creation](.cursor/skills/create-workflow/SKILL.md), [UI surface discovery](.cursor/skills/discover-ui-surface/SKILL.md), [colleague distillation](.cursor/skills/colleague-distillation/SKILL.md), and the [assistant inbox/runtime](.cursor/skills/assistant-orchestrator/SKILL.md).
 
 ## Quick Start
 
@@ -222,7 +231,7 @@ Read setup.md and set up my personal AI assistant for work.
 Read workflows/enterprise-search/enterprise-search.md and search across my connected tools for <topic>.
 ```
 
-7. Try a local trigger host after configuring a trigger:
+7. Try the trigger host after configuring a trigger:
 
 ```bash
 10x-host --trigger slack-polling --workflow workflows/assistant/assistant.md --engine cursor
@@ -306,11 +315,11 @@ The same stack works differently for each person because the tools, skills, and 
 10xProductivity started as the tool connection layer for coding agents. It is evolving into an open-source personal AI assistant for work stack:
 
 1. **Tool connections** — let the agent use the tools you already use.
-2. **Triggers** — detect incoming work through local signals that enterprise users already have.
+2. **Triggers** — detect incoming work through app and service events the user already receives.
 3. **Runtime** — provide the local machinery for polling, scheduling, state, replies, and agent invocation.
 4. **Workflows** — compose triggers, runtime, and connections into repeatable work.
 5. **Agent skills** — teach the agent how you want work done.
-6. **Human-AI interaction** — delegate through safe local triggers, coach from the laptop.
+6. **Human-AI interaction** — delegate through safe event triggers, coach from the laptop.
 7. **Learning and memory** — turn sessions, corrections, tool use, and mistakes into persistent improvements.
 8. **Self-awareness** — track capabilities and limitations based on evidence from real use.
 9. **Trusted automation** — run proven workflows from triggers or schedules.

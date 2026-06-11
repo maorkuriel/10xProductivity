@@ -31,13 +31,24 @@ TENX_PRIVATE_DIR="${TENX_PRIVATE_DIR:-$HOME/.10xProductivity}"
 ENV_FILE="$TENX_PRIVATE_DIR/.env"
 BANNED_TERM=""
 SKIP_AI_REVIEW=""
+ENV_CURSOR_API_KEY=""
 if [[ -f "$ENV_FILE" ]]; then
     while IFS='=' read -r key value; do
+        # strip surrounding quotes/whitespace from value
+        value="${value%\"}"; value="${value#\"}"; value="${value%\'}"; value="${value#\'}"
         case "$key" in
             BANNED_TERM) BANNED_TERM="$value" ;;
             SKIP_AI_REVIEW) SKIP_AI_REVIEW="$value" ;;
+            CURSOR_API_KEY) ENV_CURSOR_API_KEY="$value" ;;
         esac
     done < "$ENV_FILE"
+fi
+
+# Prefer the long-lived CURSOR_API_KEY (from TENX_PRIVATE_DIR/.env) for the agent
+# review so it runs non-interactively and does not depend on a short-lived
+# `agent login` keychain session. Only set if not already provided in the env.
+if [[ -z "${CURSOR_API_KEY:-}" && -n "$ENV_CURSOR_API_KEY" ]]; then
+    export CURSOR_API_KEY="$ENV_CURSOR_API_KEY"
 fi
 
 # Only enforce on pushes to GitHub
@@ -179,7 +190,10 @@ fi
 #   - older: "Logged in as <user>"
 #   - newer: "Logged in (user details not available)" / "Login successful"
 # while still rejecting "Not logged in".
-if $USING_CURSOR_AGENT; then
+# Skip this keychain-session check entirely when CURSOR_API_KEY is set: the agent
+# then authenticates via the key (long-lived), so an expired `agent login` session
+# is irrelevant and must not block the review.
+if $USING_CURSOR_AGENT && [[ -z "${CURSOR_API_KEY:-}" ]]; then
     AGENT_WHOAMI="$(agent whoami 2>&1 || true)"
     if echo "$AGENT_WHOAMI" | grep -qi "not logged in" \
         || ! echo "$AGENT_WHOAMI" | grep -qiE "Logged in( as| \(|$)|Login successful"; then

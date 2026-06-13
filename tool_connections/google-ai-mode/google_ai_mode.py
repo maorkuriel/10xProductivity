@@ -40,6 +40,7 @@ CHROME_APP = "Google Chrome"
 CDP_PORT = 9236
 PROFILE_DIR = Path.home() / ".browser_automation" / "google_ai_mode_cdp_profile"
 AI_MODE_URL = "https://www.google.com/aimode"
+EXISTING_CHAT_TIMEOUT_MS = 25_000
 
 # The signed-in Google account whose AI Mode history we want to use.
 # Chrome stores each signed-in account as its own sub-profile inside PROFILE_DIR
@@ -148,8 +149,7 @@ def reset_chrome(
     launch_chrome(port=port, profile_dir=profile_dir, profile_directory=profile_directory)
 
 
-def extract_answer_lines(page) -> list[str]:
-    text = page.locator("body").inner_text(timeout=10_000)
+def extract_answer_lines_from_text(text: str) -> list[str]:
     lines: list[str] = []
     skip_fragments = (
         "google apps",
@@ -172,6 +172,10 @@ def extract_answer_lines(page) -> list[str]:
     return lines
 
 
+def extract_answer_lines(page) -> list[str]:
+    return extract_answer_lines_from_text(page.locator("body").inner_text(timeout=10_000))
+
+
 def wait_for_ai_mode(page, timeout_ms: int = 25_000) -> None:
     deadline = time.time() + (timeout_ms / 1000)
     while time.time() < deadline:
@@ -184,16 +188,101 @@ def wait_for_ai_mode(page, timeout_ms: int = 25_000) -> None:
         time.sleep(1)
 
 
+def _parse_existing_chat(text: str) -> list[dict]:
+    turns: list[dict] = []
+    for block in text.split("You said:")[1:]:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+        user = lines.pop(0)
+        if lines and (
+            lines[0].endswith("AM")
+            or lines[0].endswith("PM")
+            or lines[0].endswith("a.m.")
+            or lines[0].endswith("p.m.")
+        ):
+            lines.pop(0)
+        turns.append({"user": user, "assistant": lines})
+    return turns
+
+
+def _evaluate_webview(browser, target_id: str, expression: str) -> str:
+    session = browser.new_browser_cdp_session()
+    session_id = session.send(
+        "Target.attachToTarget", {"targetId": target_id, "flatten": False}
+    )["sessionId"]
+    responses: list[dict] = []
+    session.on("Target.receivedMessageFromTarget", lambda event: responses.append(event))
+    session.send(
+        "Target.sendMessageToTarget",
+        {
+            "sessionId": session_id,
+            "message": json.dumps(
+                {
+                    "id": 1,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expression, "returnByValue": True},
+                }
+            ),
+        },
+    )
+
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        # A CDP command pumps pending Target events in Playwright's sync API.
+        session.send("Target.getTargets")
+        for response in responses:
+            message = json.loads(response["message"])
+            if message.get("id") == 1:
+                return message["result"]["result"].get("value", "")
+        time.sleep(0.1)
+    raise RuntimeError("Timed out reading the Google AI Mode webview")
+
+
+def _recover_query_webview(browser, query: str, timeout_ms: int = EXISTING_CHAT_TIMEOUT_MS) -> dict:
+    """Recover a new query that Chrome routed into an embedded contextual-task webview."""
+    deadline = time.time() + (timeout_ms / 1000)
+    while time.time() < deadline:
+        session = browser.new_browser_cdp_session()
+        targets = session.send("Target.getTargets")["targetInfos"]
+        for target in targets:
+            if target.get("type") != "webview":
+                continue
+            url = target.get("url", "")
+            parsed = urllib.parse.urlparse(url)
+            params = urllib.parse.parse_qs(parsed.query)
+            if params.get("udm") != ["50"] or params.get("q") != [query]:
+                continue
+            text = _evaluate_webview(browser, target["targetId"], "document.body.innerText")
+            if "AI Mode response is ready" not in text:
+                continue
+            turns = _parse_existing_chat(text)
+            answer = turns[-1]["assistant"] if turns else extract_answer_lines_from_text(text)
+            return {"query": query, "lines": answer, "url": url}
+        time.sleep(0.5)
+    raise RuntimeError("Could not recover the new Google AI Mode query from its webview")
+
+
 def _run_turns(playwright, port: int, query: str, followups: list[str], url: str) -> dict:
     browser = playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
     context = browser.contexts[0]
     page = context.pages[0] if context.pages else context.new_page()
-    page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-    wait_for_ai_mode(page)
-
-    turns = [{"query": query, "lines": extract_answer_lines(page), "url": page.url}]
+    recovered_webview = False
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        wait_for_ai_mode(page)
+        turns = [{"query": query, "lines": extract_answer_lines(page), "url": page.url}]
+    except Exception:
+        turns = [_recover_query_webview(browser, query)]
+        recovered_webview = True
 
     for followup in followups:
+        if recovered_webview:
+            raise RuntimeError(
+                "Google routed this query into a contextual-task webview. "
+                "Initial-query recovery succeeded, but follow-ups are not supported "
+                "through that webview yet."
+            )
         textbox = page.locator("textarea").last
         textbox.click(timeout=5_000)
         page.keyboard.press("Meta+A")
@@ -234,14 +323,50 @@ def read_thread(url: str, port: int = CDP_PORT) -> dict:
     each user message with a "You said:" line; everything between two such
     markers is the assistant's answer for that turn.
     """
+    parsed = urllib.parse.urlparse(url)
+    params = urllib.parse.parse_qs(parsed.query)
+    if params.get("udm") != ["50"] or not params.get("mtid"):
+        raise ValueError("Saved AI Mode thread URL must contain udm=50 and mtid")
+    mtid = params["mtid"][0]
+
     def _open(playwright):
         browser = playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
         context = browser.contexts[0]
-        page = context.pages[0] if context.pages else context.new_page()
-        page.goto(url, wait_until="domcontentloaded", timeout=40_000)
-        time.sleep(5)
+        page = context.new_page()
+        try:
+            page.goto(url, wait_until="commit", timeout=40_000)
+        except Exception:
+            # Chrome may route saved AI Mode chats through chrome://contextual-tasks.
+            pass
+
+        deadline = time.time() + (EXISTING_CHAT_TIMEOUT_MS / 1000)
+        body = ""
+        final_url = url
+        while time.time() < deadline:
+            session = browser.new_browser_cdp_session()
+            targets = session.send("Target.getTargets")["targetInfos"]
+            target = next(
+                (
+                    item
+                    for item in targets
+                    if item.get("type") == "webview" and mtid in item.get("url", "")
+                ),
+                None,
+            )
+            if target:
+                final_url = target["url"]
+                body = _evaluate_webview(browser, target["targetId"], "document.body.innerText")
+                if "You said:" in body:
+                    break
+            elif page.url.startswith("http"):
+                body = page.locator("body").inner_text(timeout=5_000)
+                final_url = page.url
+                if "You said:" in body:
+                    break
+            time.sleep(0.5)
         # Intentionally do NOT close the browser: keep it open for reuse.
-        return page.locator("body").inner_text(timeout=8_000), page.url
+        page.close()
+        return body, final_url
 
     ensure_chrome(port)
     with sync_playwright() as playwright:
@@ -253,14 +378,12 @@ def read_thread(url: str, port: int = CDP_PORT) -> dict:
             body, final_url = _open(playwright)
 
     signed_out = "sign in" in body.lower()[:400]
-    turns = []
-    parts = body.split("You said:")
-    for chunk in parts[1:]:
-        lines = [ln.strip() for ln in chunk.splitlines() if ln.strip()]
-        if not lines:
-            continue
-        # First line is the user message; the rest is the assistant answer.
-        turns.append({"user": lines[0], "assistant": lines[1:]})
+    if "You said:" not in body:
+        raise RuntimeError(
+            "Existing AI Mode chat recovery failed. "
+            "The signed-in account may not match the saved chat, or the session may be expired."
+        )
+    turns = _parse_existing_chat(body)
     return {"url": final_url, "signed_out": signed_out, "turns": turns}
 
 
@@ -280,6 +403,8 @@ def main() -> None:
         return
 
     if args.url:
+        if args.query or args.followup:
+            parser.error("--url cannot be combined with a query or --followup")
         print(json.dumps(read_thread(args.url, port=args.port), indent=2))
         return
 

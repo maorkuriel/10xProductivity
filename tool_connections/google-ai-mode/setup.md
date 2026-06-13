@@ -68,6 +68,10 @@ Verified scrubbed output:
 }
 ```
 
+If Chrome routes a new query into `chrome://contextual-tasks`, the query command
+automatically recovers the matching embedded webview. Follow-up questions after
+this routing path are not yet supported.
+
 Multi-turn:
 
 ```bash

@@ -36,6 +36,22 @@ for _root in _CANDIDATE_ROOTS:
 
 from tool_connections.shared_utils.browser import sync_playwright
 
+
+def _load_runtime_env() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    for env_path in (
+        Path.home() / ".10xProductivity" / ".env",
+        Path.home() / "git_repos" / "10xProductivity" / ".env",
+    ):
+        if env_path.is_file():
+            load_dotenv(env_path, override=False)
+
+
+_load_runtime_env()
+
 CHROME_APP = "Google Chrome"
 CDP_PORT = 9236
 PROFILE_DIR = Path.home() / ".browser_automation" / "google_ai_mode_cdp_profile"
@@ -80,12 +96,102 @@ def cdp_ready(port: int = CDP_PORT) -> bool:
         return False
 
 
+def profile_chrome_main_pids(
+    profile_dir: Path = PROFILE_DIR,
+    port: int = CDP_PORT,
+) -> list[int]:
+    """Return PIDs of main Chrome processes for this automation profile."""
+    profile_str = str(profile_dir)
+    result = subprocess.run(["pgrep", "-f", profile_str], capture_output=True, text=True)
+    main_prefix = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+    pids: list[int] = []
+    for line in result.stdout.splitlines():
+        try:
+            pid = int(line.strip())
+        except ValueError:
+            continue
+        ps = subprocess.run(
+            ["ps", "-o", "args=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+        )
+        cmd = ps.stdout.strip()
+        if not cmd.startswith(main_prefix):
+            continue
+        if profile_str not in cmd:
+            continue
+        if f"--remote-debugging-port={port}" not in cmd:
+            continue
+        pids.append(pid)
+    return sorted(set(pids))
+
+
+def cdp_owner_pid(port: int = CDP_PORT) -> int | None:
+    """Return the PID listening on the CDP port, if any."""
+    result = subprocess.run(
+        ["lsof", "-i", f":{port}", "-sTCP:LISTEN", "-t"],
+        capture_output=True,
+        text=True,
+    )
+    for line in result.stdout.strip().splitlines():
+        try:
+            return int(line.strip())
+        except ValueError:
+            continue
+    return None
+
+
+def close_duplicate_profile_chrome(
+    profile_dir: Path = PROFILE_DIR,
+    port: int = CDP_PORT,
+) -> int:
+    """Kill extra Chrome main processes for this profile; keep the CDP listener."""
+    pids = profile_chrome_main_pids(profile_dir, port)
+    if len(pids) <= 1:
+        return len(pids)
+
+    keep = cdp_owner_pid(port)
+    if keep is None:
+        keep = pids[0]
+
+    for pid in pids:
+        if pid == keep:
+            continue
+        subprocess.run(["kill", str(pid)], check=False)
+
+    time.sleep(1)
+    return len(profile_chrome_main_pids(profile_dir, port))
+
+
+def wait_for_cdp(port: int = CDP_PORT, attempts: int = 60) -> bool:
+    for _ in range(attempts):
+        if cdp_ready(port):
+            return True
+        time.sleep(0.25)
+    return False
+
+
 def launch_chrome(
     port: int = CDP_PORT,
     profile_dir: Path = PROFILE_DIR,
     url: str = AI_MODE_URL,
     profile_directory: str | None = None,
 ) -> None:
+    """Launch Chrome only when no CDP session exists for this profile."""
+    if cdp_ready(port):
+        close_duplicate_profile_chrome(profile_dir, port)
+        return
+
+    existing = profile_chrome_main_pids(profile_dir, port)
+    if existing:
+        if wait_for_cdp(port):
+            close_duplicate_profile_chrome(profile_dir, port)
+            return
+        raise RuntimeError(
+            f"Chrome is already running for {profile_dir} but CDP port {port} "
+            "is not ready. Close the extra AI Mode Chrome windows and retry."
+        )
+
     profile_dir.mkdir(parents=True, exist_ok=True)
     if profile_directory is None:
         profile_directory = resolve_profile_directory(profile_dir)
@@ -96,6 +202,9 @@ def launch_chrome(
         except FileNotFoundError:
             pass
 
+    # Fresh launch: `-na` is required on macOS for a separate user-data-dir when
+    # the user's daily Chrome is already running. Never reach here if CDP or a
+    # profile Chrome process is already up (see checks above).
     subprocess.Popen(
         [
             "open",
@@ -107,7 +216,6 @@ def launch_chrome(
             f"--profile-directory={profile_directory}",
             "--no-first-run",
             "--no-default-browser-check",
-            "--new-window",
             "--window-size=1400,900",
             url,
         ],
@@ -116,11 +224,8 @@ def launch_chrome(
         start_new_session=True,
     )
 
-    for _ in range(60):
-        time.sleep(0.25)
-        if cdp_ready(port):
-            return
-    raise RuntimeError(f"Chrome CDP did not start on port {port}")
+    if not wait_for_cdp(port, attempts=80):
+        raise RuntimeError(f"Chrome CDP did not start on port {port}")
 
 
 def ensure_chrome(
@@ -128,8 +233,19 @@ def ensure_chrome(
     profile_dir: Path = PROFILE_DIR,
     profile_directory: str | None = None,
 ) -> None:
-    if not cdp_ready(port):
-        launch_chrome(port=port, profile_dir=profile_dir, profile_directory=profile_directory)
+    if cdp_ready(port):
+        close_duplicate_profile_chrome(profile_dir, port)
+        return
+
+    existing = profile_chrome_main_pids(profile_dir, port)
+    if existing:
+        if wait_for_cdp(port):
+            close_duplicate_profile_chrome(profile_dir, port)
+            return
+        subprocess.run(["pkill", "-f", str(profile_dir)], check=False)
+        time.sleep(2)
+
+    launch_chrome(port=port, profile_dir=profile_dir, profile_directory=profile_directory)
 
 
 def reset_chrome(

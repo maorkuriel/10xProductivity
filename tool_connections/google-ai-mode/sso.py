@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from google_ai_mode import (
-    AI_MODE_URL, CDP_PORT, PROFILE_DIR,
+    CDP_PORT, PROFILE_DIR,
     cdp_ready, ensure_chrome, launch_chrome,
 )
 
@@ -33,14 +33,17 @@ def check(port: int = CDP_PORT) -> bool:
         with sync_playwright() as pw:
             browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
             ctx = browser.contexts[0]
-            page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            page.goto(AI_MODE_URL, wait_until="domcontentloaded", timeout=15_000)
-            time.sleep(3)
+            page = ctx.new_page()
+            page.goto("https://www.google.com/", wait_until="domcontentloaded", timeout=15_000)
+            time.sleep(1)
             url = page.url.lower()
             signed_in = (
-                "accounts.google.com" not in url
+                page.locator('a[aria-label*="Google Account"]').count() > 0
+                and page.locator('a[aria-label="Sign in"]').count() == 0
+                and "accounts.google.com/signin" not in url
                 and "sorry/index" not in url
             )
+            page.close()
             browser.close()
             return signed_in
     except Exception:
@@ -51,20 +54,31 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Open or resume the Google AI Mode Chrome profile.")
     parser.add_argument("--force", action="store_true",
-                        help="Open Chrome for sign-in even if session is valid")
+                        help="Focus the profile for sign-in even if session is valid")
     args = parser.parse_args()
 
-    if not args.force and PROFILE_DIR.exists():
-        try:
+    try:
+        if args.force:
+            ensure_chrome()
+            print(f"Google AI Mode Chrome ready — profile: {PROFILE_DIR}")
+            print("Sign in to Google in the existing window if needed.")
+            sys.exit(0)
+
+        if PROFILE_DIR.exists():
             ensure_chrome()
             if check():
                 print(f"Session valid — profile: {PROFILE_DIR}")
                 print("No sign-in needed. Use --force to re-authenticate.")
                 sys.exit(0)
-        except Exception:
-            pass
+            if cdp_ready():
+                print(f"Chrome already open — profile: {PROFILE_DIR}")
+                print("Sign in in the existing window, or run with --force.")
+                sys.exit(1)
 
-    launch_chrome()
-    print(f"Opened Google AI Mode profile: {PROFILE_DIR}")
-    print("Sign in to Google in the Chrome window.")
-    print("The session persists in this dedicated profile.")
+        launch_chrome()
+        print(f"Opened Google AI Mode profile: {PROFILE_DIR}")
+        print("Sign in to Google in the Chrome window.")
+        print("The session persists in this dedicated profile.")
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
